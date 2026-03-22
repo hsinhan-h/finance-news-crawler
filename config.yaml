@@ -1,0 +1,21 @@
+schedule:
+  enabled: false         # true = 啟動常駐排程模式，false = 僅手動執行
+  run_time: "05:00"      # 每日執行時間，格式 HH:MM（24 小時制）
+  timezone: "Asia/Taipei"
+
+email:
+  enabled: false                       # 改為 true 才會啟用寄送，預設 false
+  method: gmail_oauth                  # 使用 OAuth 2.0，不需輸入密碼
+  sender_address: your@gmail.com
+  credentials_file: credentials.json  # 從 Google Cloud Console 下載
+  token_file: token.json              # 第一次授權後自動產生，之後免登入
+  subject_template: "📰 每日財經摘要 {date}"
+  recipients:
+    - user1@example.com
+
+crawler:
+  max_articles_per_site: 10
+  request_delay_min: 2   # 每站請求間隔最小秒數
+  request_delay_max: 5   # 每站請求間隔最大秒數
+  timeout: 30
+  retries: 3

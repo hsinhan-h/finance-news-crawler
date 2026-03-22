@@ -1,0 +1,10 @@
+credentials.json
+token.json
+.claude/
+*.pyc
+__pycache__/
+.env
+output/
+logs/
+.venv/
+venv/
