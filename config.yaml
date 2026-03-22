@@ -9,7 +9,7 @@ email:
   sender_address: your@gmail.com
   credentials_file: credentials.json  # 從 Google Cloud Console 下載
   token_file: token.json              # 第一次授權後自動產生，之後免登入
-  subject_template: "📰 每日財經摘要 {date}"
+  subject_template: "📰 國際財經摘要 {date}"
   recipients:
     - user1@example.com
 
