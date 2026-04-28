@@ -8,3 +8,5 @@ output/
 logs/
 .venv/
 venv/
+.github/
+.claude/
