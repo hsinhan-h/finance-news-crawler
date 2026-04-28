@@ -55,8 +55,18 @@ def run_scrapers(scraper_classes: list, crawler_cfg: dict) -> list[tuple[str, li
         scraper = cls(max_articles=max_articles, timeout=timeout, retries=retries)
         logger.info(f"Scraping: {scraper.name} ...")
         articles = scraper.get_articles()
-        logger.info(f"  -> {len(articles)} articles collected")
-        results.append((scraper.name, articles))
+        result = dict(scraper.last_result)
+        result["articles"] = articles
+        logger.info(
+            "  -> status=%s articles=%s duration=%.2fs%s",
+            result["status"],
+            len(articles),
+            result["duration_seconds"],
+            f" http_status={result['http_status']}" if result["http_status"] is not None else "",
+        )
+        if result["message"]:
+            logger.info(f"  -> detail: {result['message']}")
+        results.append(result)
         delay = random.uniform(delay_min, delay_max)
         time.sleep(delay)
     return results

@@ -43,13 +43,30 @@ def _stock_section(date_str: str, rows: list[dict]) -> str:
 def _news_section(
     emoji: str,
     section_title: str,
-    scraper_results: list[tuple[str, list[dict]]],
+    scraper_results: list[dict],
 ) -> str:
     lines = [f"## {emoji} {section_title}\n"]
-    for site_name, articles in scraper_results:
+    for result in scraper_results:
+        site_name = result.get("site_name", "Unknown")
+        articles = result.get("articles", [])
+        status = result.get("status", "unknown")
+        message = result.get("message", "")
+        http_status = result.get("http_status")
+        final_url = result.get("final_url", "")
         lines.append(f"### {site_name}\n")
         if not articles:
-            lines.append("_（本次爬取無資料或發生錯誤）_\n")
+            if status == "empty":
+                lines.append("_（本次爬取未取得任何文章）_\n")
+            else:
+                detail_parts = []
+                if http_status is not None:
+                    detail_parts.append(f"HTTP {http_status}")
+                if message:
+                    detail_parts.append(message)
+                if final_url:
+                    detail_parts.append(f"final_url={final_url}")
+                detail = " | ".join(detail_parts) if detail_parts else "未知錯誤"
+                lines.append(f"_（本次爬取失敗：{detail}）_\n")
         else:
             for a in articles:
                 lines.append(_format_article(a))

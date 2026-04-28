@@ -2,6 +2,7 @@ import logging
 import random
 import time
 import xml.etree.ElementTree as ET
+from time import perf_counter
 
 import requests
 from bs4 import BeautifulSoup
@@ -36,6 +37,7 @@ class BaseScraper:
         self.logger = logging.getLogger(self.name)
         self.session = requests.Session()
         self.session.headers.update(self._default_headers())
+        self._reset_run_state()
 
     def _default_headers(self) -> dict:
         return {
@@ -47,6 +49,40 @@ class BaseScraper:
             "Upgrade-Insecure-Requests": "1",
         }
 
+    def _reset_run_state(self) -> None:
+        self.last_result = {
+            "site_name": self.name,
+            "articles": [],
+            "status": "idle",
+            "message": "",
+            "final_url": "",
+            "http_status": None,
+            "duration_seconds": 0.0,
+        }
+
+    def _set_result(self, **updates) -> None:
+        self.last_result.update(updates)
+
+    def _build_response_hint(self, response: requests.Response | None) -> str:
+        if response is None:
+            return ""
+
+        content_type = response.headers.get("content-type", "unknown")
+        title = ""
+        preview = ""
+        if "html" in content_type and response.text:
+            soup = BeautifulSoup(response.text[:2000], "lxml")
+            if soup.title and soup.title.string:
+                title = soup.title.string.strip()
+            preview = soup.get_text(" ", strip=True)[:160]
+
+        hint = f"status={response.status_code} final_url={response.url} content_type={content_type}"
+        if title:
+            hint += f" title={title!r}"
+        if preview:
+            hint += f" preview={preview!r}"
+        return hint
+
     def fetch(self, url: str, extra_headers: dict = None) -> requests.Response | None:
         headers = {}
         if extra_headers:
@@ -55,9 +91,21 @@ class BaseScraper:
             try:
                 resp = self.session.get(url, headers=headers, timeout=self.timeout)
                 resp.raise_for_status()
+                self._set_result(final_url=resp.url, http_status=resp.status_code)
                 return resp
             except requests.RequestException as e:
-                self.logger.warning(f"[{self.name}] Attempt {attempt + 1}/{self.retries} failed for {url}: {e}")
+                response = getattr(e, "response", None)
+                hint = self._build_response_hint(response)
+                self._set_result(
+                    status="error",
+                    message=str(e),
+                    final_url=response.url if response is not None else url,
+                    http_status=response.status_code if response is not None else None,
+                )
+                suffix = f" {hint}" if hint else ""
+                self.logger.warning(
+                    f"[{self.name}] Attempt {attempt + 1}/{self.retries} failed for {url}: {e}{suffix}"
+                )
                 if attempt < self.retries - 1:
                     time.sleep(2 ** attempt)
         return None
@@ -69,15 +117,42 @@ class BaseScraper:
         raise NotImplementedError
 
     def get_articles(self) -> list[dict]:
+        self._reset_run_state()
+        started_at = perf_counter()
         try:
             articles = self.scrape()
             for a in articles:
                 a.setdefault("summary", "")
                 a["is_important"] = is_important(a.get("title", ""), a.get("summary", ""))
-            return articles[: self.max_articles]
+            articles = articles[: self.max_articles]
+            if articles:
+                status = "success"
+                message = ""
+            elif self.last_result["status"] == "error":
+                status = "error"
+                message = self.last_result["message"]
+            else:
+                status = "empty"
+                message = "Scraper returned no articles"
+            self._set_result(
+                articles=articles,
+                status=status,
+                message=message,
+                duration_seconds=round(perf_counter() - started_at, 2),
+            )
+            return articles
         except Exception as e:
             self.logger.error(f"[{self.name}] Scraping failed: {e}", exc_info=True)
+            self._set_result(
+                status="error",
+                message=str(e),
+                duration_seconds=round(perf_counter() - started_at, 2),
+            )
             return []
+
+        finally:
+            if self.last_result["duration_seconds"] == 0.0:
+                self.last_result["duration_seconds"] = round(perf_counter() - started_at, 2)
 
 
 class RSSBaseScraper(BaseScraper):
