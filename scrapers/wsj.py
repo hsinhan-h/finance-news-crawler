@@ -1,43 +1,12 @@
 """
 Wall Street Journal scraper.
-WSJ has a paywall. We scrape publicly visible content from their markets section.
+WSJ requires JavaScript for the public site, so we use Google News RSS
+filtered to wsj.com as a more reliable fallback.
 """
-from bs4 import BeautifulSoup
-from .base import BaseScraper
+from .base import RSSBaseScraper
 
 
-class WSJScraper(BaseScraper):
+class WSJScraper(RSSBaseScraper):
     name = "Wall Street Journal"
     url = "https://www.wsj.com/news/markets"
-
-    def scrape(self) -> list[dict]:
-        resp = self.fetch(self.url, extra_headers={
-            "Referer": "https://www.google.com/",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
-        if not resp:
-            return []
-        soup = BeautifulSoup(resp.text, "lxml")
-        articles = []
-        seen = set()
-
-        for tag in soup.find_all("a", href=True):
-            href = tag.get("href", "")
-            title = tag.get_text(strip=True)
-            if not title or len(title) < 20:
-                continue
-            if "/articles/" not in href:
-                continue
-            if title in seen:
-                continue
-            seen.add(title)
-            full_url = href if href.startswith("http") else f"https://www.wsj.com{href}"
-            articles.append({
-                "title": title,
-                "url": full_url,
-                "summary": "",
-            })
-            if len(articles) >= self.max_articles:
-                break
-
-        return articles
+    rss_url = "https://news.google.com/rss/search?q=site:wsj.com+markets+OR+finance&hl=en-US&gl=US&ceid=US:en"
