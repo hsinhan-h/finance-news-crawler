@@ -43,6 +43,60 @@ def load_config(path: str = "config.yaml") -> dict:
         return yaml.safe_load(f)
 
 
+def validate_config(config: dict) -> list[str]:
+    warnings = []
+
+    crawler_cfg = config.get("crawler", {})
+    delay_min = crawler_cfg.get("request_delay_min", 2)
+    delay_max = crawler_cfg.get("request_delay_max", 5)
+    if delay_min < 0 or delay_max < 0:
+        warnings.append("crawler.request_delay_min / request_delay_max 不應為負數")
+    if delay_min > delay_max:
+        warnings.append("crawler.request_delay_min 大於 request_delay_max，將導致延遲設定不合理")
+    if crawler_cfg.get("timeout", 30) <= 0:
+        warnings.append("crawler.timeout 應大於 0")
+    if crawler_cfg.get("retries", 3) < 1:
+        warnings.append("crawler.retries 至少應為 1")
+
+    email_cfg = config.get("email", {})
+    if email_cfg.get("enabled", False):
+        recipients = email_cfg.get("recipients", [])
+        credentials_file = email_cfg.get("credentials_file", "credentials.json")
+        sender = email_cfg.get("sender_address", "")
+        if not sender:
+            warnings.append("email.enabled=true 但 sender_address 未設定")
+        if not recipients:
+            warnings.append("email.enabled=true 但 recipients 為空")
+        if not os.path.exists(credentials_file):
+            warnings.append(f"email.enabled=true 但找不到 credentials_file: {credentials_file}")
+
+    return warnings
+
+
+def log_scraper_summary(results: list[dict], section_name: str) -> None:
+    total = len(results)
+    success = sum(1 for result in results if result["status"] == "success")
+    empty = sum(1 for result in results if result["status"] == "empty")
+    errors = [result for result in results if result["status"] == "error"]
+    logger.info(
+        "%s summary -> total=%s success=%s empty=%s error=%s",
+        section_name,
+        total,
+        success,
+        empty,
+        len(errors),
+    )
+    for result in errors:
+        logger.info(
+            "%s issue -> site=%s failure_type=%s http_status=%s final_url=%s",
+            section_name,
+            result["site_name"],
+            result.get("failure_type") or "unknown",
+            result.get("http_status"),
+            result.get("final_url") or result["site_name"],
+        )
+
+
 def run_scrapers(scraper_classes: list, crawler_cfg: dict) -> list[tuple[str, list[dict]]]:
     max_articles = crawler_cfg.get("max_articles_per_site", 10)
     timeout = crawler_cfg.get("timeout", 30)
@@ -76,6 +130,10 @@ def run_job(config: dict) -> None:
     logger.info("=" * 60)
     logger.info("Starting daily finance news crawl...")
 
+    config_warnings = validate_config(config)
+    for warning in config_warnings:
+        logger.warning(f"Config warning: {warning}")
+
     crawler_cfg = config.get("crawler", {})
 
     # 1. Stock data
@@ -86,10 +144,12 @@ def run_job(config: dict) -> None:
     # 2. International news
     logger.info("--- International scrapers ---")
     international = run_scrapers(INTERNATIONAL_SCRAPERS, crawler_cfg)
+    log_scraper_summary(international, "International")
 
     # 3. Taiwan news
     logger.info("--- Taiwan scrapers ---")
     taiwan = run_scrapers(TAIWAN_SCRAPERS, crawler_cfg)
+    log_scraper_summary(taiwan, "Taiwan")
 
     # 4. Generate report
     output_dir = "output"

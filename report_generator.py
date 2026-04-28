@@ -50,6 +50,7 @@ def _news_section(
         site_name = result.get("site_name", "Unknown")
         articles = result.get("articles", [])
         status = result.get("status", "unknown")
+        failure_type = result.get("failure_type", "")
         message = result.get("message", "")
         http_status = result.get("http_status")
         final_url = result.get("final_url", "")
@@ -59,6 +60,8 @@ def _news_section(
                 lines.append("_（本次爬取未取得任何文章）_\n")
             else:
                 detail_parts = []
+                if failure_type:
+                    detail_parts.append(f"type={failure_type}")
                 if http_status is not None:
                     detail_parts.append(f"HTTP {http_status}")
                 if message:

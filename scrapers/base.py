@@ -54,7 +54,9 @@ class BaseScraper:
             "site_name": self.name,
             "articles": [],
             "status": "idle",
+            "failure_type": "",
             "message": "",
+            "response_hint": "",
             "final_url": "",
             "http_status": None,
             "duration_seconds": 0.0,
@@ -83,6 +85,30 @@ class BaseScraper:
             hint += f" preview={preview!r}"
         return hint
 
+    def _classify_failure(self, error: requests.RequestException, response: requests.Response | None) -> str:
+        if isinstance(error, requests.Timeout):
+            return "timeout"
+        if response is None:
+            return "network_error"
+
+        content_type = response.headers.get("content-type", "")
+        body = response.text[:2000] if "html" in content_type and response.text else ""
+        lowered = body.lower()
+
+        if response.status_code in {401, 403}:
+            if "enable js" in lowered or "disable any ad blocker" in lowered:
+                return "javascript_challenge"
+            if "security verification" in lowered or "are you a robot" in lowered:
+                return "blocked"
+            if response.status_code == 401:
+                return "auth_required"
+            return "blocked"
+        if response.status_code == 429:
+            return "rate_limited"
+        if 500 <= response.status_code < 600:
+            return "upstream_error"
+        return "http_error"
+
     def fetch(self, url: str, extra_headers: dict = None) -> requests.Response | None:
         headers = {}
         if extra_headers:
@@ -96,9 +122,12 @@ class BaseScraper:
             except requests.RequestException as e:
                 response = getattr(e, "response", None)
                 hint = self._build_response_hint(response)
+                failure_type = self._classify_failure(e, response)
                 self._set_result(
                     status="error",
+                    failure_type=failure_type,
                     message=str(e),
+                    response_hint=hint,
                     final_url=response.url if response is not None else url,
                     http_status=response.status_code if response is not None else None,
                 )
@@ -127,16 +156,20 @@ class BaseScraper:
             articles = articles[: self.max_articles]
             if articles:
                 status = "success"
+                failure_type = ""
                 message = ""
             elif self.last_result["status"] == "error":
                 status = "error"
+                failure_type = self.last_result["failure_type"]
                 message = self.last_result["message"]
             else:
                 status = "empty"
+                failure_type = ""
                 message = "Scraper returned no articles"
             self._set_result(
                 articles=articles,
                 status=status,
+                failure_type=failure_type,
                 message=message,
                 duration_seconds=round(perf_counter() - started_at, 2),
             )
@@ -145,6 +178,7 @@ class BaseScraper:
             self.logger.error(f"[{self.name}] Scraping failed: {e}", exc_info=True)
             self._set_result(
                 status="error",
+                failure_type="parse_error",
                 message=str(e),
                 duration_seconds=round(perf_counter() - started_at, 2),
             )
