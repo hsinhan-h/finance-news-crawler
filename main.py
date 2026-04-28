@@ -6,11 +6,13 @@ Usage:
   python main.py --schedule      # Start daemon mode (runs daily per config.yaml)
 """
 import argparse
+import json
 import logging
 import os
 import random
 import time
 from datetime import datetime
+from time import perf_counter
 
 import pytz
 import schedule
@@ -97,6 +99,24 @@ def log_scraper_summary(results: list[dict], section_name: str) -> None:
         )
 
 
+def build_stock_summary(stock_date: str, stock_rows: list[dict]) -> dict:
+    unavailable = [row["name"] for row in stock_rows if row.get("close") == "N/A"]
+    return {
+        "trade_date": stock_date,
+        "total": len(stock_rows),
+        "available": len(stock_rows) - len(unavailable),
+        "unavailable": unavailable,
+    }
+
+
+def save_run_summary(summary: dict) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_path = os.path.join(LOG_DIR, f"run_summary_{timestamp}.json")
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+    return summary_path
+
+
 def run_scrapers(scraper_classes: list, crawler_cfg: dict) -> list[tuple[str, list[dict]]]:
     max_articles = crawler_cfg.get("max_articles_per_site", 10)
     timeout = crawler_cfg.get("timeout", 30)
@@ -127,6 +147,7 @@ def run_scrapers(scraper_classes: list, crawler_cfg: dict) -> list[tuple[str, li
 
 
 def run_job(config: dict) -> None:
+    started_at = perf_counter()
     logger.info("=" * 60)
     logger.info("Starting daily finance news crawl...")
 
@@ -140,6 +161,15 @@ def run_job(config: dict) -> None:
     logger.info("Fetching stock data...")
     stock_date, stock_rows = fetch_stock_data()
     logger.info(f"Stock data date: {stock_date}")
+    stock_summary = build_stock_summary(stock_date, stock_rows)
+    logger.info(
+        "Stock summary -> total=%s available=%s unavailable=%s",
+        stock_summary["total"],
+        stock_summary["available"],
+        len(stock_summary["unavailable"]),
+    )
+    if stock_summary["unavailable"]:
+        logger.info("Stock issue -> unavailable=%s", ", ".join(stock_summary["unavailable"]))
 
     # 2. International news
     logger.info("--- International scrapers ---")
@@ -169,6 +199,23 @@ def run_job(config: dict) -> None:
             logger.error("Email sending failed.")
     else:
         logger.info("Email disabled — skipping.")
+
+    total_duration = round(perf_counter() - started_at, 2)
+    summary = {
+        "run_timestamp": datetime.now().isoformat(timespec="seconds"),
+        "duration_seconds": total_duration,
+        "config_warnings": config_warnings,
+        "stock": stock_summary,
+        "international": international,
+        "taiwan": taiwan,
+        "report_path": report_path,
+        "email": {
+            "enabled": email_cfg.get("enabled", False),
+        },
+    }
+    summary_path = save_run_summary(summary)
+    logger.info(f"Run summary saved: {summary_path}")
+    logger.info(f"Total duration: {total_duration:.2f}s")
 
     logger.info("Done.")
     logger.info("=" * 60)
