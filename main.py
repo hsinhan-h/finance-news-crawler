@@ -62,15 +62,39 @@ def validate_config(config: dict) -> list[str]:
 
     email_cfg = config.get("email", {})
     if email_cfg.get("enabled", False):
+        method = str(email_cfg.get("method", "gmail_oauth")).lower()
         recipients = email_cfg.get("recipients", [])
-        credentials_file = email_cfg.get("credentials_file", "credentials.json")
         sender = email_cfg.get("sender_address", "")
         if not sender:
             warnings.append("email.enabled=true 但 sender_address 未設定")
         if not recipients:
             warnings.append("email.enabled=true 但 recipients 為空")
-        if not os.path.exists(credentials_file):
-            warnings.append(f"email.enabled=true 但找不到 credentials_file: {credentials_file}")
+
+        if method == "gmail_oauth":
+            credentials_file = email_cfg.get("credentials_file", "credentials.json")
+            if not os.path.exists(credentials_file):
+                warnings.append(f"email.method=gmail_oauth 但找不到 credentials_file: {credentials_file}")
+        elif method == "smtp":
+            host = email_cfg.get("host", "")
+            port = email_cfg.get("port")
+            security = str(email_cfg.get("security", "starttls")).lower()
+            enable_smtp_auth = bool(email_cfg.get("enable_smtp_auth", True))
+            login_id = email_cfg.get("login_id") or email_cfg.get("username", "")
+            password = email_cfg.get("password", "")
+            if not host:
+                warnings.append("email.method=smtp 但 host 未設定")
+            if port in (None, ""):
+                warnings.append("email.method=smtp 但 port 未設定")
+            elif int(port) <= 0:
+                warnings.append("email.method=smtp 的 port 應大於 0")
+            if security not in {"ssl", "starttls", "none"}:
+                warnings.append("email.method=smtp 的 security 僅支援 ssl、starttls、none")
+            if enable_smtp_auth and not login_id:
+                warnings.append("email.method=smtp 且 enable_smtp_auth=true，但 login_id / username 未設定")
+            if enable_smtp_auth and not password:
+                warnings.append("email.method=smtp 但 password 未設定")
+        else:
+            warnings.append(f"email.method 不支援: {method}")
 
     return warnings
 
