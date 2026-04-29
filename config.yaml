@@ -1,17 +1,24 @@
 schedule:
   enabled: false         # true = 啟動常駐排程模式，false = 僅手動執行
-  run_time: "05:00"      # 每日執行時間，格式 HH:MM（24 小時制）
+  run_time: "08:00"      # 每日執行時間，格式 HH:MM（24 小時制）
   timezone: "Asia/Taipei"
 
 email:
-  enabled: false                       # 改為 true 才會啟用寄送，預設 false
-  method: gmail_oauth                  # 使用 OAuth 2.0，不需輸入密碼
-  sender_address: your@gmail.com
-  credentials_file: credentials.json  # 從 Google Cloud Console 下載
-  token_file: token.json              # 第一次授權後自動產生，之後免登入
+  enabled: true                        # 改為 true 才會啟用寄送，預設 false
+  method: smtp                         # 支援 smtp 或 gmail_oauth
+  sender_address: user1@example.com
+  host: mail.com
+  port: 587
+  security: starttls                   # smtp 模式支援 ssl / starttls / none
+  enable_smtp_auth: false              # 參考現有系統設定，可先測試不做 SMTP AUTH
+  login_id: user1              # 若啟用 SMTP AUTH，優先使用 login_id，其次 username
+  username: user1@example.com # 舊欄位保留相容
+  password: 'password'
+  credentials_file: credentials.json  # gmail_oauth 模式使用
+  token_file: token.json              # gmail_oauth 模式首次授權後自動產生
   subject_template: "📰 國際財經摘要 {date}"
   recipients:
-    - user1@example.com
+    - user2@example.com
 
 crawler:
   max_articles_per_site: 10
