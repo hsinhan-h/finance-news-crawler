@@ -85,17 +85,30 @@
 ```yaml
 email:
   enabled: true                        # 改為 true 才會啟用寄送，預設 false
-  method: gmail_oauth                  # 使用 OAuth 2.0，不需輸入密碼
-  sender_address: your@gmail.com
-  credentials_file: credentials.json  # 從 Google Cloud Console 下載
-  token_file: token.json              # 第一次授權後自動產生，之後免登入
+  method: smtp                         # 支援 smtp 或 gmail_oauth
+  sender_address: alerts@example.com
+  host: smtp.example.com               # smtp 模式必填
+  port: 587                            # smtp 模式必填
+  security: starttls                   # smtp 模式支援 ssl / starttls / none
+  username: alerts@example.com         # smtp 模式必填
+  password: your_smtp_password         # smtp 模式必填
+  credentials_file: credentials.json  # gmail_oauth 模式使用
+  token_file: token.json              # gmail_oauth 模式第一次授權後自動產生
   subject_template: "📰 每日財經摘要 {date}"
   recipients:
     - user1@example.com
     - user2@example.com
 ```
 
-#### 5-3. Gmail OAuth 初次設定步驟（只需做一次）
+#### 5-3. SMTP 模式設定說明
+- `method: smtp` 時，透過標準 SMTP 伺服器寄送
+- `security` 支援：
+  - `ssl`：通常使用 465
+  - `starttls`：通常使用 587
+  - `none`：僅建議內網或測試環境使用
+- 若使用 Gmail SMTP，通常需搭配 App Password，而不是一般登入密碼
+
+#### 5-4. Gmail OAuth 初次設定步驟（只需做一次）
 1. 前往 [Google Cloud Console](https://console.cloud.google.com/) 建立新專案
 2. 啟用 **Gmail API**
 3. 建立 OAuth 2.0 憑證，類型選「**桌面應用程式**」
@@ -103,14 +116,15 @@ email:
 5. 第一次執行時，瀏覽器自動開啟請你登入 Google 帳號並授權
 6. 授權完成後自動產生 `token.json`，**之後排程執行完全不需要人工介入**
 
-#### 5-4. Email 內容規格
+#### 5-5. Email 內容規格
 - 郵件主旨由 `subject_template` 決定，`{date}` 自動替換為當日日期
 - 郵件本文將 Markdown 報告轉換為 **HTML 格式**寄出（使用 `markdown2` 套件）
 - 同時附加原始 `.md` 檔案作為附件
 
-#### 5-5. 安全性說明
+#### 5-6. 安全性說明
 - `credentials.json` 與 `token.json` 請加入 `.gitignore`，不要上傳至 Git
-- 不需要密碼，也不需要開啟「低安全性應用程式存取」
+- `password` 建議以環境變數或秘密管理工具提供，不要直接提交真實值
+- Gmail OAuth 不需要密碼，也不需要開啟「低安全性應用程式存取」
 
 ### 6. 排程設定
 
